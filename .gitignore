@@ -1,0 +1,13 @@
+node_modules/
+build/
+dist/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example
+
+# Runtime data: contains real patient submissions and an encrypted SMTP
+# password (the encryption key falls back to a value hardcoded in server.ts,
+# so this file must never be committed).
+data/

@@ -1,0 +1,6 @@
+{
+  "name": "Patient Experience Survey",
+  "description": "A clean, modern, and mobile-friendly survey app for clinic patients to submit feedback and export responses.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
