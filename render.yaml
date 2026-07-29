@@ -14,13 +14,7 @@ services:
         sync: false
       - key: ADMIN_PASSWORD_HASH
         sync: false
-      - key: SMTP_HOST
-        sync: false
-      - key: SMTP_PORT
-        sync: false
-      - key: SMTP_USERNAME
-        sync: false
-      - key: SMTP_PASSWORD
+      - key: BREVO_API_KEY
         sync: false
       - key: FROM_EMAIL
         sync: false

@@ -56,10 +56,7 @@ export default function AdminPanel({ activeBranch, onRefreshTrigger = 0 }: Admin
   // Settings form state
   const [adminUser, setAdminUser] = useState("");
   const [adminPass, setAdminPass] = useState("");
-  const [smtpHost, setSmtpHost] = useState("");
-  const [smtpPort, setSmtpPort] = useState("587");
-  const [smtpUser, setSmtpUser] = useState("");
-  const [smtpPass, setSmtpPass] = useState("");
+  const [brevoApiKey, setBrevoApiKey] = useState("");
   const [fromEmail, setFromEmail] = useState("");
   const [branchName, setBranchName] = useState("");
   const [branchEmail, setBranchEmail] = useState("");
@@ -245,16 +242,13 @@ export default function AdminPanel({ activeBranch, onRefreshTrigger = 0 }: Admin
       if (data.success) {
         const s = data.settings;
         setAdminUser(s.adminUsername);
-        setSmtpHost(s.smtpHost || "");
-        setSmtpPort(String(s.smtpPort || "587"));
-        setSmtpUser(s.smtpUsername || "");
         setFromEmail(s.fromEmail || "");
         setBranchName(s.branchName || "");
         setBranchEmail(s.branchEmail || "");
         setHeadOfficeEmail(s.headOfficeEmail || "");
         setTestRecipient(s.headOfficeEmail || "");
         setAdminPass(""); // Keep security fields empty
-        setSmtpPass(s.smtpPasswordConfigured ? "********" : "");
+        setBrevoApiKey(s.brevoApiKeyConfigured ? "********" : "");
         setDevelopmentMode(s.developmentMode !== false);
       }
     } catch (err: any) {
@@ -280,10 +274,7 @@ export default function AdminPanel({ activeBranch, onRefreshTrigger = 0 }: Admin
         body: JSON.stringify({
           adminUsername: adminUser,
           adminPassword: adminPass,
-          smtpHost,
-          smtpPort,
-          smtpUsername: smtpUser,
-          smtpPassword: smtpPass,
+          brevoApiKey,
           fromEmail,
           branchName,
           branchEmail,
@@ -301,8 +292,8 @@ export default function AdminPanel({ activeBranch, onRefreshTrigger = 0 }: Admin
       if (data.success) {
         setSettingsSuccess("Settings saved successfully to server.");
         setAdminPass(""); // Clear password field
-        if (smtpPass && smtpPass !== "********") {
-          setSmtpPass("********");
+        if (brevoApiKey && brevoApiKey !== "********") {
+          setBrevoApiKey("********");
         }
       } else {
         throw new Error(data.message);
@@ -343,7 +334,7 @@ export default function AdminPanel({ activeBranch, onRefreshTrigger = 0 }: Admin
     } catch (err: any) {
       setTestResult({
         success: false,
-        message: err.message || "Failed to connect to SMTP server."
+        message: err.message || "Failed to connect to Brevo."
       });
     } finally {
       setIsTestingEmail(false);
@@ -416,7 +407,7 @@ export default function AdminPanel({ activeBranch, onRefreshTrigger = 0 }: Admin
                   </span>
                   <h4 className="text-xl font-black text-[#1B365D] font-display">Console Protected</h4>
                   <p className="text-slate-500 text-xs font-semibold max-w-xs mx-auto leading-relaxed">
-                    Access to survey records, SMTP settings, and branch configs is restricted to clinic administrators.
+                    Access to survey records, email settings, and branch configs is restricted to clinic administrators.
                   </p>
                 </div>
 
@@ -531,7 +522,7 @@ export default function AdminPanel({ activeBranch, onRefreshTrigger = 0 }: Admin
                         : "border-transparent text-slate-400 hover:text-slate-600"
                     }`}
                   >
-                    SMTP Diagnostics
+                    Email Diagnostics
                   </button>
                 </div>
 
@@ -814,11 +805,11 @@ export default function AdminPanel({ activeBranch, onRefreshTrigger = 0 }: Admin
                       </div>
                     </div>
 
-                    {/* Section C: SMTP Server credentials */}
+                    {/* Section C: Brevo Email API credentials */}
                     <div className="space-y-3.5">
                       <div className="flex items-center gap-2 text-xs font-black text-[#1B365D] uppercase tracking-wider border-b border-slate-100 pb-1.5">
                         <Server className="w-3.5 h-3.5 text-[#E31B23]" />
-                        <span>SMTP Email Server Credentials</span>
+                        <span>Brevo Email API Credentials</span>
                       </div>
 
                       {/* Dynamic Development Mode Switcher */}
@@ -830,7 +821,7 @@ export default function AdminPanel({ activeBranch, onRefreshTrigger = 0 }: Admin
                               Temporary Development Mode
                             </h5>
                             <p className="text-[10px] text-slate-500 font-semibold max-w-sm">
-                              When enabled, automated email sending is skipped so you can test all features offline. Disable this once you configure real SMTP credentials later.
+                              When enabled, automated email sending is skipped so you can test all features offline. Disable this once you configure a real Brevo API key later.
                             </p>
                           </div>
                           <button
@@ -850,60 +841,20 @@ export default function AdminPanel({ activeBranch, onRefreshTrigger = 0 }: Admin
                       </div>
 
                       <div className="space-y-3">
-                        <div className="grid grid-cols-3 gap-3">
-                          <div className="col-span-2 space-y-1">
-                            <label className="text-[10px] font-bold text-slate-500 block">
-                              SMTP Host Name
-                            </label>
-                            <input
-                              type="text"
-                              value={smtpHost}
-                              onChange={(e) => setSmtpHost(e.target.value)}
-                              placeholder="e.g. mail.domain.co.za"
-                              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-250 rounded-xl text-xs focus:border-[#1B365D] focus:ring-0 outline-hidden font-bold text-slate-800"
-                            />
-                          </div>
-
-                          <div className="col-span-1 space-y-1">
-                            <label className="text-[10px] font-bold text-slate-500 block">
-                              SMTP Port
-                            </label>
-                            <input
-                              type="number"
-                              value={smtpPort}
-                              onChange={(e) => setSmtpPort(e.target.value)}
-                              placeholder="e.g. 587"
-                              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-250 rounded-xl text-xs focus:border-[#1B365D] focus:ring-0 outline-hidden font-bold text-slate-800"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                          <div className="space-y-1">
-                            <label className="text-[10px] font-bold text-slate-500 block">
-                              SMTP Username / Login Account
-                            </label>
-                            <input
-                              type="text"
-                              value={smtpUser}
-                              onChange={(e) => setSmtpUser(e.target.value)}
-                              placeholder="e.g. system@domain.co.za"
-                              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-250 rounded-xl text-xs focus:border-[#1B365D] focus:ring-0 outline-hidden font-bold text-slate-800"
-                            />
-                          </div>
-
-                          <div className="space-y-1">
-                            <label className="text-[10px] font-bold text-slate-500 block">
-                              SMTP Password
-                            </label>
-                            <input
-                              type="password"
-                              value={smtpPass}
-                              onChange={(e) => setSmtpPass(e.target.value)}
-                              placeholder="SMTP Secret Key"
-                              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-250 rounded-xl text-xs focus:border-[#1B365D] focus:ring-0 outline-hidden font-bold text-slate-800 placeholder:text-slate-400"
-                            />
-                          </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-slate-500 block">
+                            Brevo API Key
+                          </label>
+                          <input
+                            type="password"
+                            value={brevoApiKey}
+                            onChange={(e) => setBrevoApiKey(e.target.value)}
+                            placeholder="e.g. xkeysib-..."
+                            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-250 rounded-xl text-xs focus:border-[#1B365D] focus:ring-0 outline-hidden font-bold text-slate-800 placeholder:text-slate-400"
+                          />
+                          <p className="text-[9px] text-slate-400 font-medium">
+                            Find or create this under Brevo &rarr; Settings &rarr; SMTP &amp; API &rarr; API Keys.
+                          </p>
                         </div>
 
                         <div className="space-y-1">
@@ -917,6 +868,9 @@ export default function AdminPanel({ activeBranch, onRefreshTrigger = 0 }: Admin
                             placeholder="e.g. no-reply@arrienel.co.za"
                             className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-250 rounded-xl text-xs focus:border-[#1B365D] focus:ring-0 outline-hidden font-bold text-slate-800"
                           />
+                          <p className="text-[9px] text-slate-400 font-medium">
+                            Must be a sender verified in your Brevo account (Senders &amp; IP settings).
+                          </p>
                         </div>
                       </div>
                     </div>
@@ -938,15 +892,15 @@ export default function AdminPanel({ activeBranch, onRefreshTrigger = 0 }: Admin
                   </form>
                 )}
 
-                {/* Tab 3: SMTP Connection Diagnostics */}
+                {/* Tab 3: Brevo Email Diagnostics */}
                 {activeTab === "diagnostics" && (
                   <div className="space-y-6">
                     <div className="space-y-2">
                       <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
-                        On-Demand SMTP Connection Diagnostics
+                        On-Demand Email Connection Diagnostics
                       </span>
                       <p className="text-slate-500 text-xs font-semibold leading-relaxed">
-                        Verify SMTP host and login authentication credentials instantly by dispatching a real-time system test notification.
+                        Verify your Brevo API key instantly by dispatching a real-time system test notification.
                       </p>
                     </div>
 

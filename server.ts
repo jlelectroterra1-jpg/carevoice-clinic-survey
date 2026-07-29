@@ -1,6 +1,5 @@
 import express from "express";
 import path from "path";
-import nodemailer from "nodemailer";
 import dotenv from "dotenv";
 import fs from "fs";
 import crypto from "crypto";
@@ -57,16 +56,48 @@ function decrypt(text: string): string {
 const DEFAULT_SETTINGS = {
   adminUsername: process.env.ADMIN_USERNAME || "ArrieNel",
   adminPasswordHash: process.env.ADMIN_PASSWORD_HASH || bcrypt.hashSync("sunningdale", 10),
-  smtpHost: process.env.SMTP_HOST || "",
-  smtpPort: process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT) : 587,
-  smtpUsername: process.env.SMTP_USERNAME || "",
-  smtpPasswordEncrypted: process.env.SMTP_PASSWORD ? encrypt(process.env.SMTP_PASSWORD) : "",
+  brevoApiKeyEncrypted: process.env.BREVO_API_KEY ? encrypt(process.env.BREVO_API_KEY) : "",
   fromEmail: process.env.FROM_EMAIL || "arrienelsunningdaleclinic@gmail.com",
   branchName: "ARRIE NEL PHARMACY SUNNINGDALE CLINIC",
   branchEmail: "sunningdale@arrienel.co.za",
   headOfficeEmail: process.env.HEAD_OFFICE_EMAIL || "arrienelsunningdaleclinic@gmail.com",
   developmentMode: false
 };
+
+// Sends an email via Brevo's HTTP API (port 443) instead of raw SMTP, since
+// Render's free tier blocks all outbound traffic on SMTP ports 25/465/587.
+async function sendBrevoEmail(params: {
+  apiKey: string;
+  fromEmail: string;
+  fromName: string;
+  to: string;
+  cc?: string;
+  subject: string;
+  html: string;
+  text: string;
+}): Promise<void> {
+  const response = await fetch("https://api.brevo.com/v3/smtp/email", {
+    method: "POST",
+    headers: {
+      accept: "application/json",
+      "api-key": params.apiKey,
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({
+      sender: { name: params.fromName, email: params.fromEmail },
+      to: [{ email: params.to }],
+      ...(params.cc ? { cc: [{ email: params.cc }] } : {}),
+      subject: params.subject,
+      htmlContent: params.html,
+      textContent: params.text
+    })
+  });
+
+  if (!response.ok) {
+    const errBody = await response.text();
+    throw new Error(`Brevo API error (${response.status}): ${errBody}`);
+  }
+}
 
 function getSettings() {
   if (!fs.existsSync(SETTINGS_PATH)) {
@@ -250,15 +281,12 @@ app.delete("/api/admin/submissions", requireAdmin, (req, res) => {
 app.get("/api/admin/settings", requireAdmin, (req, res) => {
   const settings = getSettings();
   
-  // Return settings with password masked for security
+  // Return settings with API key masked for security
   return res.json({
     success: true,
     settings: {
       adminUsername: settings.adminUsername,
-      smtpHost: settings.smtpHost,
-      smtpPort: settings.smtpPort,
-      smtpUsername: settings.smtpUsername,
-      smtpPasswordConfigured: !!settings.smtpPasswordEncrypted,
+      brevoApiKeyConfigured: !!settings.brevoApiKeyEncrypted,
       fromEmail: settings.fromEmail,
       branchName: settings.branchName,
       branchEmail: settings.branchEmail,
@@ -272,10 +300,7 @@ app.post("/api/admin/settings", requireAdmin, async (req, res) => {
   const {
     adminUsername,
     adminPassword,
-    smtpHost,
-    smtpPort,
-    smtpUsername,
-    smtpPassword,
+    brevoApiKey,
     fromEmail,
     branchName,
     branchEmail,
@@ -296,13 +321,9 @@ app.post("/api/admin/settings", requireAdmin, async (req, res) => {
     settings.adminPasswordHash = await bcrypt.hash(adminPassword, 10);
   }
 
-  settings.smtpHost = smtpHost !== undefined ? smtpHost.trim() : settings.smtpHost;
-  settings.smtpPort = smtpPort !== undefined ? parseInt(smtpPort) || 587 : settings.smtpPort;
-  settings.smtpUsername = smtpUsername !== undefined ? smtpUsername.trim() : settings.smtpUsername;
-  
-  // Only encrypt new SMTP password if it's updated and not masked placeholder
-  if (smtpPassword !== undefined && smtpPassword !== "" && smtpPassword !== "********") {
-    settings.smtpPasswordEncrypted = encrypt(smtpPassword);
+  // Only encrypt new Brevo API key if it's updated and not the masked placeholder
+  if (brevoApiKey !== undefined && brevoApiKey !== "" && brevoApiKey !== "********") {
+    settings.brevoApiKeyEncrypted = encrypt(brevoApiKey);
   }
 
   settings.fromEmail = fromEmail !== undefined ? fromEmail.trim() : settings.fromEmail;
@@ -325,51 +346,36 @@ app.post("/api/admin/test-email", requireAdmin, async (req, res) => {
   const { testRecipient } = req.body;
   const recipient = testRecipient || settings.headOfficeEmail || "headoffice@arrienel.co.za";
 
-  const host = settings.smtpHost;
-  const port = settings.smtpPort;
-  const username = settings.smtpUsername;
-  const password = decrypt(settings.smtpPasswordEncrypted);
+  const apiKey = decrypt(settings.brevoApiKeyEncrypted);
   const from = settings.fromEmail || "no-reply@arrienel.co.za";
 
-  if (!host || !username || !password) {
+  if (!apiKey) {
     return res.status(400).json({
       success: false,
-      message: "SMTP configuration is incomplete. Please set SMTP host, username, and password first."
+      message: "Brevo configuration is incomplete. Please set the Brevo API key first."
     });
   }
 
   try {
-    const transporter = nodemailer.createTransport({
-      host,
-      port,
-      secure: port === 465,
-      auth: {
-        user: username,
-        pass: password
-      },
-      tls: {
-        rejectUnauthorized: false
-      }
-    });
-
-    await transporter.sendMail({
-      from: `"ARRIE NEL PHARMACY Test" <${from}>`,
+    await sendBrevoEmail({
+      apiKey,
+      fromEmail: from,
+      fromName: "ARRIE NEL PHARMACY Test",
       to: recipient,
       subject: `🔧 TEST EMAIL: ARRIE NEL PHARMACY SUNNINGDALE CLINIC Survey`,
+      text: `Connection Successful! This test email confirms that your Brevo configuration is correctly set up and the survey system can automatically deliver patient reports to the Head Office. Sender Email: ${from}`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);">
           <div style="background-color: #1B365D; border-bottom: 5px solid #E31B23; padding: 25px; text-align: center; color: white;">
             <h1 style="margin: 0; font-size: 20px; text-transform: uppercase;">ARRIE NEL PHARMACY</h1>
-            <p style="margin: 5px 0 0 0; font-size: 13px; color: #93c5fd;">SMTP Test Notification</p>
+            <p style="margin: 5px 0 0 0; font-size: 13px; color: #93c5fd;">Brevo Test Notification</p>
           </div>
           <div style="padding: 30px; background-color: white;">
             <h3 style="color: #1B365D; margin-top: 0;">Connection Successful!</h3>
             <p style="font-size: 14px; line-height: 1.5; color: #374151;">
-              This test email confirms that your SMTP configurations are correctly set up and the survey system can automatically deliver patient reports to the Head Office.
+              This test email confirms that your Brevo configuration is correctly set up and the survey system can automatically deliver patient reports to the Head Office.
             </p>
             <table style="width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 13px; color: #4b5563; background-color: #f9fafb; border-radius: 8px;">
-              <tr><td style="padding: 10px; font-weight: bold; border-bottom: 1px solid #f3f4f6;">SMTP Host:</td><td style="padding: 10px; border-bottom: 1px solid #f3f4f6;">${host}</td></tr>
-              <tr><td style="padding: 10px; font-weight: bold; border-bottom: 1px solid #f3f4f6;">SMTP Port:</td><td style="padding: 10px; border-bottom: 1px solid #f3f4f6;">${port}</td></tr>
               <tr><td style="padding: 10px; font-weight: bold;">Sender Email:</td><td style="padding: 10px;">${from}</td></tr>
             </table>
           </div>
@@ -772,22 +778,19 @@ app.post("/api/survey", async (req, res) => {
     </html>
     `;
 
-    // Configure Nodemailer SMTP Transporter
-    const host = settings.smtpHost;
-    const port = settings.smtpPort;
-    const username = settings.smtpUsername;
-    const password = decrypt(settings.smtpPasswordEncrypted);
-    const from = settings.fromEmail || username || "arrienelsunningdaleclinic@gmail.com";
+    // Configure Brevo API credentials
+    const apiKey = decrypt(settings.brevoApiKeyEncrypted);
+    const from = settings.fromEmail || "arrienelsunningdaleclinic@gmail.com";
 
     // Recipient dynamic resolution (read from admin setting)
     const recipientEmail = settings.headOfficeEmail || finalHeadOfficeEmail || "arrienelsunningdaleclinic@gmail.com";
 
     console.log(`Sending clinic survey result for ${finalBranchName} to: ${recipientEmail}`);
 
-    // If SMTP credentials are missing, mark email as failed with explanatory note
-    if (!host || !username || !password) {
-      const unconfiguredMsg = "SMTP settings not configured in Admin Console (Host, Username, or Password missing).";
-      console.warn(`⚠️ [SMTP UNCONFIGURED] ${unconfiguredMsg}`);
+    // If the Brevo API key is missing, mark email as failed with explanatory note
+    if (!apiKey) {
+      const unconfiguredMsg = "Brevo API key not configured in Admin Console.";
+      console.warn(`⚠️ [BREVO UNCONFIGURED] ${unconfiguredMsg}`);
       updateSubmissionRecord(savedRecord.id, {
         emailStatus: "failed",
         emailError: unconfiguredMsg,
@@ -799,30 +802,18 @@ app.post("/api/survey", async (req, res) => {
         emailSent: false,
         recordId: savedRecord.id,
         warning: unconfiguredMsg,
-        message: "Survey submitted and stored successfully. (SMTP server credentials are required for email dispatch)."
+        message: "Survey submitted and stored successfully. (Brevo API key is required for email dispatch)."
       });
     }
 
     try {
-      // Initialize real Nodemailer SMTP Transport
-      const transporter = nodemailer.createTransport({
-        host,
-        port,
-        secure: port === 465,
-        auth: {
-          user: username,
-          pass: password
-        },
-        tls: {
-          rejectUnauthorized: false
-        }
-      });
-
-      // Send the email
-      await transporter.sendMail({
-        from: `"${finalBranchName}" <${from}>`,
+      // Send the email via Brevo's HTTP API
+      await sendBrevoEmail({
+        apiKey,
+        fromEmail: from,
+        fromName: finalBranchName,
         to: recipientEmail,
-        cc: finalBranchEmail ? finalBranchEmail : undefined,
+        cc: finalBranchEmail || undefined,
         subject: subject,
         html: htmlEmail,
         text: `
@@ -858,7 +849,7 @@ app.post("/api/survey", async (req, res) => {
         `
       });
 
-      console.log(`✅ SMTP email successfully sent to ${recipientEmail}`);
+      console.log(`✅ Brevo email successfully sent to ${recipientEmail}`);
       updateSubmissionRecord(savedRecord.id, {
         emailStatus: "sent",
         recipientEmail,
@@ -873,7 +864,7 @@ app.post("/api/survey", async (req, res) => {
       });
     } catch (emailError: any) {
       const errDetail = emailError.message || String(emailError);
-      console.error("❌ SMTP email dispatch failed:", emailError);
+      console.error("❌ Brevo email dispatch failed:", emailError);
       updateSubmissionRecord(savedRecord.id, {
         emailStatus: "failed",
         emailError: errDetail,
@@ -884,7 +875,7 @@ app.post("/api/survey", async (req, res) => {
         success: true,
         emailSent: false,
         recordId: savedRecord.id,
-        warning: `SMTP delivery failed: ${errDetail}`,
+        warning: `Email delivery failed: ${errDetail}`,
         message: "Survey submitted and saved successfully. (Email delivery error logged)."
       });
     }
