@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { SurveySubmission } from "../types";
 import { downloadCSV } from "../utils/storage";
+import { apiUrl } from "../utils/api";
 import { Branch } from "../branches";
 
 interface AdminPanelProps {
@@ -129,7 +130,7 @@ export default function AdminPanel({ activeBranch, onRefreshTrigger = 0 }: Admin
   // Check active session status on server
   const checkSession = async (token: string) => {
     try {
-      const res = await fetch("/api/admin/check-session", {
+      const res = await fetch(apiUrl("/api/admin/check-session"), {
         headers: { Authorization: `Bearer ${token}` }
       });
       const data = await res.json();
@@ -151,7 +152,7 @@ export default function AdminPanel({ activeBranch, onRefreshTrigger = 0 }: Admin
     setIsLoggingIn(true);
 
     try {
-      const res = await fetch("/api/admin/login", {
+      const res = await fetch(apiUrl("/api/admin/login"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username: loginUsername, password: loginPassword })
@@ -178,7 +179,7 @@ export default function AdminPanel({ activeBranch, onRefreshTrigger = 0 }: Admin
   const handleLogout = async (message?: string) => {
     if (sessionToken) {
       try {
-        await fetch("/api/admin/logout", {
+        await fetch(apiUrl("/api/admin/logout"), {
           method: "POST",
           headers: { Authorization: `Bearer ${sessionToken}` }
         });
@@ -201,10 +202,10 @@ export default function AdminPanel({ activeBranch, onRefreshTrigger = 0 }: Admin
     setSubError(null);
 
     try {
-      const res = await fetch("/api/admin/submissions", {
+      const res = await fetch(apiUrl("/api/admin/submissions"), {
         headers: { Authorization: `Bearer ${sessionToken}` }
       });
-      
+
       if (res.status === 401) {
         handleLogout("Session expired. Please log in again.");
         return;
@@ -229,7 +230,7 @@ export default function AdminPanel({ activeBranch, onRefreshTrigger = 0 }: Admin
     setSettingsError(null);
 
     try {
-      const res = await fetch("/api/admin/settings", {
+      const res = await fetch(apiUrl("/api/admin/settings"), {
         headers: { Authorization: `Bearer ${sessionToken}` }
       });
 
@@ -265,7 +266,7 @@ export default function AdminPanel({ activeBranch, onRefreshTrigger = 0 }: Admin
     setSettingsError(null);
 
     try {
-      const res = await fetch("/api/admin/settings", {
+      const res = await fetch(apiUrl("/api/admin/settings"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -312,7 +313,7 @@ export default function AdminPanel({ activeBranch, onRefreshTrigger = 0 }: Admin
     setTestResult(null);
 
     try {
-      const res = await fetch("/api/admin/test-email", {
+      const res = await fetch(apiUrl("/api/admin/test-email"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -350,7 +351,7 @@ export default function AdminPanel({ activeBranch, onRefreshTrigger = 0 }: Admin
   const handleClearAll = async () => {
     if (!sessionToken) return;
     try {
-      const res = await fetch("/api/admin/submissions", {
+      const res = await fetch(apiUrl("/api/admin/submissions"), {
         method: "DELETE",
         headers: { Authorization: `Bearer ${sessionToken}` }
       });

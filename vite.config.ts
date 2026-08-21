@@ -5,6 +5,11 @@ import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
   return {
+    // Defaults to root ('/') for the Render deployment (frontend served from
+    // the same origin as the API). The GitHub Pages workflow overrides this
+    // to '/carevoice-clinic-survey/' since project sites are served from a
+    // sub-path, not the domain root.
+    base: process.env.VITE_BASE_PATH || '/',
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {

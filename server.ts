@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 import fs from "fs";
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
+import cors from "cors";
 import { createServer as createViteServer } from "vite";
 
 // Load environment variables
@@ -12,8 +13,41 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
 
+// Allowed cross-origin frontends. The GitHub Pages site (patient-facing) and
+// local dev servers need explicit CORS access since they run on a different
+// origin than this API. Same-origin requests (e.g. the Render-hosted
+// frontend) are never subject to CORS checks, so this list only matters for
+// the separated-frontend deployment.
+const ALLOWED_ORIGINS = [
+  "https://jlelectroterra1-jpg.github.io",
+  "http://localhost:5173",
+  "http://localhost:3000",
+  ...(process.env.EXTRA_ALLOWED_ORIGIN ? [process.env.EXTRA_ALLOWED_ORIGIN] : [])
+];
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow same-origin/non-browser requests (no Origin header) and any
+    // explicitly allowlisted origin. No credentials are used (auth is via a
+    // Bearer token, not cookies), so a strict origin allowlist is enough.
+    if (!origin || ALLOWED_ORIGINS.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error("Not allowed by CORS"));
+  },
+  methods: ["GET", "POST", "DELETE"],
+  allowedHeaders: ["Content-Type", "Authorization"]
+}));
+
 // Enable JSON parsing
 app.use(express.json());
+
+// Lightweight health/status endpoint. The GitHub Pages frontend polls this
+// on startup to detect when Render's free-tier instance has finished waking
+// up from sleep, without exposing any implementation detail to the client.
+app.get("/api/health", (req, res) => {
+  res.json({ status: "ok" });
+});
 
 // Setup Data Directories
 const DATA_DIR = path.join(process.cwd(), "data");

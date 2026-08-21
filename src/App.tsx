@@ -5,16 +5,23 @@ import { CONFIG } from "./config";
 import { BRANCHES, getActiveBranch, Branch } from "./branches";
 import { SurveyFormState, SurveySubmission } from "./types";
 import { saveSubmission } from "./utils/storage";
+import { apiUrl, IS_CROSS_ORIGIN_API } from "./utils/api";
 import SurveyForm from "./components/SurveyForm";
 import ThankYouScreen from "./components/ThankYouScreen";
 import AdminPanel from "./components/AdminPanel";
+import PreparingScreen from "./components/PreparingScreen";
 
 export default function App() {
   const [activeBranch, setActiveBranch] = useState<Branch>(() => getActiveBranch());
   const [activeSubmission, setActiveSubmission] = useState<SurveySubmission | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  
+
+  // Only the separately-hosted (GitHub Pages) frontend needs to wait for the
+  // backend to wake up — the combined Render deployment can't have served
+  // this page at all unless its own server was already awake.
+  const [isBackendReady, setIsBackendReady] = useState(!IS_CROSS_ORIGIN_API);
+
   // Triggers updates inside the AdminPanel database list
   const [refreshAdminTrigger, setRefreshAdminTrigger] = useState(0);
 
@@ -22,6 +29,35 @@ export default function App() {
   useEffect(() => {
     setActiveBranch(getActiveBranch());
   }, []);
+
+  // Poll the backend's health endpoint until it responds, so a sleeping
+  // Render instance wakes up invisibly behind a branded loading screen
+  // instead of patients seeing the hosting platform's own loading page.
+  useEffect(() => {
+    if (isBackendReady) return;
+    let cancelled = false;
+
+    const checkBackend = async () => {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 5000);
+        const response = await fetch(apiUrl("/api/health"), { signal: controller.signal });
+        clearTimeout(timeout);
+        if (response.ok) {
+          if (!cancelled) setIsBackendReady(true);
+          return;
+        }
+      } catch {
+        // Backend still waking up or temporarily unreachable — retry silently.
+      }
+      if (!cancelled) setTimeout(checkBackend, 2500);
+    };
+
+    checkBackend();
+    return () => {
+      cancelled = true;
+    };
+  }, [isBackendReady]);
 
   const handleFormSubmit = async (formData: SurveyFormState) => {
     setIsSubmitting(true);
@@ -46,7 +82,7 @@ export default function App() {
     };
 
     try {
-      const response = await fetch("/api/survey", {
+      const response = await fetch(apiUrl("/api/survey"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -99,6 +135,10 @@ export default function App() {
     setSubmitError(null);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
+
+  if (!isBackendReady) {
+    return <PreparingScreen />;
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col antialiased relative">
