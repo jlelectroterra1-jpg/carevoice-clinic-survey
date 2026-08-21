@@ -26,14 +26,14 @@ const ALLOWED_ORIGINS = [
 ];
 
 app.use(cors({
+  // Allow same-origin/non-browser requests (no Origin header) and any
+  // explicitly allowlisted origin. No credentials are used (auth is via a
+  // Bearer token, not cookies), so a strict origin allowlist is enough.
+  // Passing `false` (rather than an Error) just omits CORS headers for a
+  // disallowed origin instead of raising a 500 — the browser still blocks
+  // the response from being read either way.
   origin: (origin, callback) => {
-    // Allow same-origin/non-browser requests (no Origin header) and any
-    // explicitly allowlisted origin. No credentials are used (auth is via a
-    // Bearer token, not cookies), so a strict origin allowlist is enough.
-    if (!origin || ALLOWED_ORIGINS.includes(origin)) {
-      return callback(null, true);
-    }
-    return callback(new Error("Not allowed by CORS"));
+    callback(null, !origin || ALLOWED_ORIGINS.includes(origin));
   },
   methods: ["GET", "POST", "DELETE"],
   allowedHeaders: ["Content-Type", "Authorization"]
